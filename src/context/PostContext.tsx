@@ -31,7 +31,6 @@ const PostContext = createContext<PostContextType | undefined>(undefined);
 export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [posts, setPosts] = useState<Post[]>([]);
 
-  // Fetch posts and add userReactions from localStorage
   const fetchPosts = async () => {
     try {
       const response = await databases.listDocuments(DB_ID, COLLECTION_POST_ID, [
@@ -83,21 +82,38 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addReaction = async (postId: string, reactionType: 'hearts' | 'flames' | 'frowns') => {
     try {
       const reactedPosts = JSON.parse(localStorage.getItem('reactedPosts') || '{}');
-      const key = `${postId}_${reactionType}`;
+
+      // Find currently reacted type on this post, if any
+      const currentReaction = ['hearts', 'flames', 'frowns'].find(
+        rt => reactedPosts[`${postId}_${rt}`]
+      );
+
       const post = posts.find(p => p.$id === postId);
       if (!post) return;
 
-      const alreadyReacted = reactedPosts[key];
+      let updatedReactions = { ...post.reactions };
 
-      const updatedReactions = {
-        ...post.reactions,
-        [reactionType]: post.reactions[reactionType] + (alreadyReacted ? -1 : 1),
-      };
+      if (currentReaction === reactionType) {
+        // Toggle off the same reaction
+        updatedReactions[reactionType] = post.reactions[reactionType] - 1;
+        delete reactedPosts[`${postId}_${reactionType}`];
+      } else {
+        // Remove old reaction if any
+        if (currentReaction) {
+          updatedReactions[currentReaction] = post.reactions[currentReaction] - 1;
+          delete reactedPosts[`${postId}_${currentReaction}`];
+        }
+        // Add new reaction
+        updatedReactions[reactionType] = (updatedReactions[reactionType] || 0) + 1;
+        reactedPosts[`${postId}_${reactionType}`] = true;
+      }
 
-      const updatedPost = await databases.updateDocument(DB_ID, COLLECTION_POST_ID, postId, {
+      // Update database
+      await databases.updateDocument(DB_ID, COLLECTION_POST_ID, postId, {
         reactions: updatedReactions,
       });
 
+      // Update local state
       setPosts(prevPosts =>
         prevPosts.map(p =>
           p.$id === postId
@@ -105,19 +121,19 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ...p,
                 reactions: updatedReactions,
                 userReactions: {
-                  ...p.userReactions,
-                  [reactionType]: !alreadyReacted,
+                  hearts: false,
+                  flames: false,
+                  frowns: false,
+                  ...(currentReaction === reactionType
+                    ? {} // toggled off, no reaction active
+                    : { [reactionType]: true }),
                 },
               }
             : p
         )
       );
 
-      if (alreadyReacted) {
-        delete reactedPosts[key];
-      } else {
-        reactedPosts[key] = true;
-      }
+      // Update localStorage
       localStorage.setItem('reactedPosts', JSON.stringify(reactedPosts));
     } catch (error) {
       console.error('Error toggling reaction:', error);
@@ -130,8 +146,8 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const trendingPosts = [...posts]
     .sort((a, b) => {
-      const totalA = a.reactions.hearts + a.reactions.flames;
-      const totalB = b.reactions.hearts + b.reactions.flames;
+      const totalA = a.reactions.hearts + a.reactions.flames + a.reactions.frowns;
+      const totalB = b.reactions.hearts + b.reactions.flames + b.reactions.frowns;
       return totalB - totalA;
     })
     .slice(0, 10);
