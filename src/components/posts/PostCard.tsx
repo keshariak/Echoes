@@ -14,13 +14,10 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
     const timestamp = new Date(timestampString);
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
-
     if (diffInMinutes < 1) return 'just now';
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-
     const diffInHours = Math.floor(diffInMinutes / 60);
     if (diffInHours < 24) return `${diffInHours}h ago`;
-
     const diffInDays = Math.floor(diffInHours / 24);
     return `${diffInDays}d ago`;
   };
@@ -36,25 +33,28 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
         <div className="flex space-x-4">
           <ReactionButton
             count={post.reactions.hearts}
-            icon={<Heart className="w-5 h-5" />}
+            active={post.userReactions?.hearts}
+            icon={<Heart className="w-5 h-5" fill={post.userReactions?.hearts ? 'red' : 'none'} />}
             color="text-red-500"
             onClick={() => addReaction(post.$id, 'hearts')}
           />
           <ReactionButton
             count={post.reactions.flames}
-            icon={<Flame className="w-5 h-5" />}
+            active={post.userReactions?.flames}
+            icon={<Flame className="w-5 h-5" fill={post.userReactions?.flames ? 'orange' : 'none'} />}
             color="text-orange-500"
             onClick={() => addReaction(post.$id, 'flames')}
           />
           <ReactionButton
             count={post.reactions.frowns}
-            icon={<Frown className="w-5 h-5" />}
-            color="text-gray-500"
+            active={post.userReactions?.frowns}
+            icon={<Frown className="w-5 h-5" fill={post.userReactions?.frowns ? 'yellow' : 'none'} />}
+            color="text-yellow-500"
             onClick={() => addReaction(post.$id, 'frowns')}
           />
         </div>
         <span className="text-xs text-gray-500 dark:text-gray-400">
-          {formatTime(post.timestamp as any)}
+          {formatTime(post.timestamp)}
         </span>
       </div>
     </div>
@@ -66,15 +66,19 @@ interface ReactionButtonProps {
   icon: React.ReactNode;
   color: string;
   onClick: () => void;
+  active?: boolean;
 }
 
-const ReactionButton: React.FC<ReactionButtonProps> = ({ count, icon, color, onClick }) => {
+const ReactionButton: React.FC<ReactionButtonProps> = ({
+  count,
+  icon,
+  color,
+  onClick,
+  active,
+}) => {
   return (
-    <button
-      className="flex items-center space-x-1 group"
-      onClick={onClick}
-    >
-      <span className={`${color} transition-transform group-hover:scale-110`}>
+    <button className="flex items-center space-x-1 group" onClick={onClick}>
+      <span className={`transition-transform group-hover:scale-110 ${active ? color : 'text-gray-400'}`}>
         {icon}
       </span>
       <span className="text-gray-600 dark:text-gray-400 text-sm">{count}</span>

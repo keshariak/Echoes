@@ -10,6 +10,11 @@ export interface Post {
     frowns: number;
   };
   category?: Category;
+  userReactions?: {
+    hearts?: boolean;
+    flames?: boolean;
+    frowns?: boolean;
+  };
 }
 
 export type Category = 
@@ -31,3 +36,4 @@ export interface CategoryInfo {
   name: string;
   icon: string;
 }
+

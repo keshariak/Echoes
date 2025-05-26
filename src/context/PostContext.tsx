@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-// import { Post, Category } from '../types';
-import { databases, DB_ID, COLLECTION_POST_ID, COLLECTION_REACTION_ID, Query } from '../configs/appwriteCongig';
-import { ID } from 'appwrite';
+import { databases, DB_ID, COLLECTION_POST_ID, Query } from '../configs/appwriteCongig';
 
 interface PostContextType {
   posts: Post[];
@@ -10,6 +8,7 @@ interface PostContextType {
   addReaction: (postId: string, reactionType: 'hearts' | 'flames' | 'frowns') => Promise<void>;
   getPostsByCategory: (category: Category) => Post[];
 }
+
 export interface Post {
   $id?: string;
   content: string;
@@ -20,6 +19,11 @@ export interface Post {
     frowns: number;
   };
   category?: Category;
+  userReactions?: {
+    hearts?: boolean;
+    flames?: boolean;
+    frowns?: boolean;
+  };
 }
 
 const PostContext = createContext<PostContextType | undefined>(undefined);
@@ -27,30 +31,37 @@ const PostContext = createContext<PostContextType | undefined>(undefined);
 export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [posts, setPosts] = useState<Post[]>([]);
 
-  // Fetch posts from Appwrite
+  // Fetch posts and add userReactions from localStorage
   const fetchPosts = async () => {
-    
     try {
       const response = await databases.listDocuments(DB_ID, COLLECTION_POST_ID, [
         Query.orderDesc('timestamp'),
       ]);
-      console.log(response)
-      const fetchedPosts = response.documents as Post[];
+
+      const reactedPosts = JSON.parse(localStorage.getItem('reactedPosts') || '{}');
+
+      const fetchedPosts = (response.documents as Post[]).map(post => {
+        const userReactions = {
+          hearts: !!reactedPosts[`${post.$id}_hearts`],
+          flames: !!reactedPosts[`${post.$id}_flames`],
+          frowns: !!reactedPosts[`${post.$id}_frowns`],
+        };
+        return { ...post, userReactions };
+      });
+
       setPosts(fetchedPosts);
     } catch (error) {
-      console.error("Failed to fetch posts:", error);
+      console.error('Failed to fetch posts:', error);
     }
-
   };
 
   useEffect(() => {
     fetchPosts();
   }, []);
 
-  //Add a new post to Appwrite
   const addPost = async (content: string, category?: Category) => {
     try {
-      const newPost: Omit<Post, 'id'> = {
+      const newPost: Omit<Post, '$id'> = {
         content,
         timestamp: new Date().toISOString(),
         reactions: {
@@ -62,26 +73,25 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       const response = await databases.createDocument(DB_ID, COLLECTION_POST_ID, 'unique()', newPost);
-      setPosts(prevPosts => [response as Post, ...prevPosts]);
+      const userReactions = { hearts: false, flames: false, frowns: false };
+      setPosts(prevPosts => [{ ...(response as Post), userReactions }, ...prevPosts]);
     } catch (error) {
-      console.error("Failed to add post:", error);
+      console.error('Failed to add post:', error);
     }
   };
 
-
-
-
-
-
-  // Add a reaction (updates post)
   const addReaction = async (postId: string, reactionType: 'hearts' | 'flames' | 'frowns') => {
     try {
+      const reactedPosts = JSON.parse(localStorage.getItem('reactedPosts') || '{}');
+      const key = `${postId}_${reactionType}`;
       const post = posts.find(p => p.$id === postId);
       if (!post) return;
 
+      const alreadyReacted = reactedPosts[key];
+
       const updatedReactions = {
         ...post.reactions,
-        [reactionType]: post.reactions[reactionType] + 1,
+        [reactionType]: post.reactions[reactionType] + (alreadyReacted ? -1 : 1),
       };
 
       const updatedPost = await databases.updateDocument(DB_ID, COLLECTION_POST_ID, postId, {
@@ -89,56 +99,35 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       setPosts(prevPosts =>
-        prevPosts.map(p => (p.$id === postId ? (updatedPost as Post) : p))
+        prevPosts.map(p =>
+          p.$id === postId
+            ? {
+                ...p,
+                reactions: updatedReactions,
+                userReactions: {
+                  ...p.userReactions,
+                  [reactionType]: !alreadyReacted,
+                },
+              }
+            : p
+        )
       );
+
+      if (alreadyReacted) {
+        delete reactedPosts[key];
+      } else {
+        reactedPosts[key] = true;
+      }
+      localStorage.setItem('reactedPosts', JSON.stringify(reactedPosts));
     } catch (error) {
-      console.error("Failed to update reaction:", error);
+      console.error('Error toggling reaction:', error);
     }
   };
 
-  //add Reactio Updated so one can only like one time
-//   const addReaction = async (postId: string, reactionType: 'hearts' | 'flames' | 'frowns') => {
-//   try {
-//     const reactedPosts = JSON.parse(localStorage.getItem('reactedPosts') || '{}');
-
-//     if (reactedPosts[postId]) {
-//       console.warn('Already reacted to this post');
-//       return;
-//     }
-
-//     const post = posts.find(p => p.$id === postId);
-//     if (!post) return;
-
-//     const updatedReactions = {
-//       ...post.reactions,
-//       [reactionType]: post.reactions[reactionType] + 1,
-//     };
-
-//     const updatedPost = await databases.updateDocument(DB_ID, COLLECTION_POST_ID, postId, {
-//       reactions: updatedReactions,
-//     });
-
-//     // Update state
-//     setPosts(prevPosts =>
-//       prevPosts.map(p => (p.$id === postId ? (updatedPost as Post) : p))
-//     );
-
-//     // Save in localStorage to prevent more reactions
-//     reactedPosts[postId] = reactionType;
-//     localStorage.setItem('reactedPosts', JSON.stringify(reactedPosts));
-
-//   } catch (error) {
-//     console.error("Failed to update reaction:", error);
-//   }
-// };
-
-
-  // Filter posts by category
   const getPostsByCategory = (category: Category) => {
     return posts.filter(post => post.category === category);
   };
 
-  // Trending posts sorted by reaction counts
   const trendingPosts = [...posts]
     .sort((a, b) => {
       const totalA = a.reactions.hearts + a.reactions.flames;
@@ -156,9 +145,8 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const usePosts = (): PostContextType => {
   const context = useContext(PostContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('usePosts must be used within a PostProvider');
   }
   return context;
 };
-

@@ -5,7 +5,7 @@ import { usePosts } from '../context/PostContext';
 
 const Home: React.FC = () => {
   const { posts } = usePosts();
-  console.log(posts.reverse())
+  // console.log(posts.reverse())
 
   return (
     <div className="max-w-2xl mx-auto px-4">
