@@ -1,12 +1,16 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { databases, DB_ID, COLLECTION_POST_ID, Query } from '../configs/appwriteCongig';
+import { databases, DB_ID, COLLECTION_POST_ID, COLLECTION_COMMENT_ID, Query, ID } from '../configs/appwriteCongig';
+
+type ReactionType = 'hearts' | 'flames' | 'cry' | 'smile' | 'laugh' | 'neutral';
 
 interface PostContextType {
   posts: Post[];
   trendingPosts: Post[];
   addPost: (content: string, category?: Category) => Promise<void>;
-  addReaction: (postId: string, reactionType: 'hearts' | 'flames' | 'frowns') => Promise<void>;
+  addReaction: (postId: string, reactionType: ReactionType) => Promise<void>;
   getPostsByCategory: (category: Category) => Post[];
+  addComment: (postId: string, content: string) => Promise<void>;
+  getComments: (postId: string) => Promise<CommentType[]>;
 }
 
 export interface Post {
@@ -16,14 +20,22 @@ export interface Post {
   reactions: {
     hearts: number;
     flames: number;
-    frowns: number;
+    cry: number;
+    smile: number;
+    laugh: number;
+    neutral: number;
   };
   category?: Category;
   userReactions?: {
-    hearts?: boolean;
-    flames?: boolean;
-    frowns?: boolean;
+    [key in ReactionType]?: boolean;
   };
+}
+
+export interface CommentType {
+  $id?: string;
+  postId: string;
+  content: string;
+  timestamp: string;
 }
 
 const PostContext = createContext<PostContextType | undefined>(undefined);
@@ -40,10 +52,13 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const reactedPosts = JSON.parse(localStorage.getItem('reactedPosts') || '{}');
 
       const fetchedPosts = (response.documents as Post[]).map(post => {
-        const userReactions = {
+        const userReactions: { [key in ReactionType]: boolean } = {
           hearts: !!reactedPosts[`${post.$id}_hearts`],
           flames: !!reactedPosts[`${post.$id}_flames`],
-          frowns: !!reactedPosts[`${post.$id}_frowns`],
+          cry: !!reactedPosts[`${post.$id}_cry`],
+          smile: !!reactedPosts[`${post.$id}_smile`],
+          laugh: !!reactedPosts[`${post.$id}_laugh`],
+          neutral: !!reactedPosts[`${post.$id}_neutral`],
         };
         return { ...post, userReactions };
       });
@@ -63,77 +78,86 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const newPost: Omit<Post, '$id'> = {
         content,
         timestamp: new Date().toISOString(),
-        reactions: {
-          hearts: 0,
-          flames: 0,
-          frowns: 0,
-        },
+        reactions: { hearts: 0, flames: 0, cry: 0, smile: 0, laugh: 0, neutral: 0 },
         category,
       };
 
-      const response = await databases.createDocument(DB_ID, COLLECTION_POST_ID, 'unique()', newPost);
-      const userReactions = { hearts: false, flames: false, frowns: false };
+      const response = await databases.createDocument(DB_ID, COLLECTION_POST_ID, ID.unique(), newPost);
+      const userReactions = {
+        hearts: false,
+        flames: false,
+        cry: false,
+        smile: false,
+        laugh: false,
+        neutral: false,
+      };
+
       setPosts(prevPosts => [{ ...(response as Post), userReactions }, ...prevPosts]);
     } catch (error) {
       console.error('Failed to add post:', error);
     }
   };
 
-  const addReaction = async (postId: string, reactionType: 'hearts' | 'flames' | 'frowns') => {
+  const addReaction = async (postId: string, reactionType: ReactionType) => {
     try {
       const reactedPosts = JSON.parse(localStorage.getItem('reactedPosts') || '{}');
 
-      // Find currently reacted type on this post, if any
-      const currentReaction = ['hearts', 'flames', 'frowns'].find(
-        rt => reactedPosts[`${postId}_${rt}`]
-      );
+      // Find existing reaction on this post by user
+      const currentReactionKey = Object.keys(reactedPosts).find(key => key.startsWith(`${postId}_`));
+      const currentReaction = currentReactionKey ? currentReactionKey.split('_')[1] as ReactionType : null;
 
       const post = posts.find(p => p.$id === postId);
       if (!post) return;
 
-      let updatedReactions = { ...post.reactions };
+      const updatedReactions = { ...post.reactions };
 
       if (currentReaction === reactionType) {
-        // Toggle off the same reaction
-        updatedReactions[reactionType] = post.reactions[reactionType] - 1;
-        delete reactedPosts[`${postId}_${reactionType}`];
+        // Toggle off reaction
+        updatedReactions[reactionType] = Math.max(0, (post.reactions[reactionType] || 1) - 1);
+        delete reactedPosts[currentReactionKey!];
       } else {
-        // Remove old reaction if any
+        // Remove previous reaction if exists
         if (currentReaction) {
-          updatedReactions[currentReaction] = post.reactions[currentReaction] - 1;
-          delete reactedPosts[`${postId}_${currentReaction}`];
+          updatedReactions[currentReaction] = Math.max(0, (post.reactions[currentReaction] || 1) - 1);
+          delete reactedPosts[currentReactionKey!];
         }
         // Add new reaction
-        updatedReactions[reactionType] = (updatedReactions[reactionType] || 0) + 1;
+        updatedReactions[reactionType] = (post.reactions[reactionType] || 0) + 1;
         reactedPosts[`${postId}_${reactionType}`] = true;
       }
 
-      // Update database
+      // Update backend document
       await databases.updateDocument(DB_ID, COLLECTION_POST_ID, postId, {
         reactions: updatedReactions,
       });
 
-      // Update local state
+      // Update local posts state
       setPosts(prevPosts =>
-        prevPosts.map(p =>
-          p.$id === postId
-            ? {
-                ...p,
-                reactions: updatedReactions,
-                userReactions: {
-                  hearts: false,
-                  flames: false,
-                  frowns: false,
-                  ...(currentReaction === reactionType
-                    ? {} // toggled off, no reaction active
-                    : { [reactionType]: true }),
-                },
-              }
-            : p
-        )
+        prevPosts.map(p => {
+          if (p.$id !== postId) return p;
+
+          // Reset all userReactions to false
+          const newUserReactions: { [key in ReactionType]: boolean } = {
+            hearts: false,
+            flames: false,
+            cry: false,
+            smile: false,
+            laugh: false,
+            neutral: false,
+          };
+
+          if (currentReaction !== reactionType) {
+            newUserReactions[reactionType] = true;
+          }
+
+          return {
+            ...p,
+            reactions: updatedReactions,
+            userReactions: newUserReactions,
+          };
+        })
       );
 
-      // Update localStorage
       localStorage.setItem('reactedPosts', JSON.stringify(reactedPosts));
     } catch (error) {
       console.error('Error toggling reaction:', error);
@@ -144,16 +168,52 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return posts.filter(post => post.category === category);
   };
 
+  const addComment = async (postId: string, content: string) => {
+    try {
+      const comment: Omit<CommentType, '$id'> = {
+        postId,
+        content,
+        timestamp: new Date().toISOString(),
+      };
+      await databases.createDocument(DB_ID, COLLECTION_COMMENT_ID, ID.unique(), comment);
+    } catch (error) {
+      console.error('Failed to add comment:', error);
+    }
+  };
+
+  const getComments = async (postId: string): Promise<CommentType[]> => {
+    try {
+      const response = await databases.listDocuments(DB_ID, COLLECTION_COMMENT_ID, [
+        Query.equal('postId', postId),
+        Query.orderDesc('timestamp'),
+      ]);
+      return response.documents as CommentType[];
+    } catch (error) {
+      console.error('Failed to fetch comments:', error);
+      return [];
+    }
+  };
+
   const trendingPosts = [...posts]
     .sort((a, b) => {
-      const totalA = a.reactions.hearts + a.reactions.flames + a.reactions.frowns;
-      const totalB = b.reactions.hearts + b.reactions.flames + b.reactions.frowns;
+      const totalA = Object.values(a.reactions).reduce((acc, val) => acc + val, 0);
+      const totalB = Object.values(b.reactions).reduce((acc, val) => acc + val, 0);
       return totalB - totalA;
     })
     .slice(0, 10);
 
   return (
-    <PostContext.Provider value={{ posts, trendingPosts, addPost, addReaction, getPostsByCategory }}>
+    <PostContext.Provider
+      value={{
+        posts,
+        trendingPosts,
+        addPost,
+        addReaction,
+        getPostsByCategory,
+        addComment,
+        getComments,
+      }}
+    >
       {children}
     </PostContext.Provider>
   );

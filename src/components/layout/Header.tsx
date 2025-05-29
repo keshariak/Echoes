@@ -45,9 +45,12 @@ const Header: React.FC = () => {
           <NavLink to="/trending" current={location.pathname === '/trending'}>
             Trending
           </NavLink>
-          <NavLink to="/search" current={location.pathname === '/search'}>
+          {/* <NavLink to="/search" current={location.pathname === '/search'}>
             <Search className="w-4 h-4 mr-1" />
             Search
+          </NavLink> */}
+          <NavLink to="/groups" current={location.pathname === '/groups'}>  
+            Group
           </NavLink>
           <NavLink to="/live" current={location.pathname === '/live'}>
             <span className="relative mr-1">
@@ -56,6 +59,11 @@ const Header: React.FC = () => {
             </span>
           </NavLink>
         </nav>
+        <div className='flex'>
+         <NavLink to="/search" current={location.pathname === '/search'}>
+            <Search className="w-5 h-5 mr-1" />
+            
+          </NavLink>
 
         <button
           onClick={toggleTheme}
@@ -68,6 +76,8 @@ const Header: React.FC = () => {
             <Moon className="w-5 h-5 text-primary-600" />
           )}
         </button>
+        </div>
+       
       </div>
 
       {/* Mobile Navigation */}
@@ -78,9 +88,12 @@ const Header: React.FC = () => {
         <MobileNavLink to="/trending" current={location.pathname === '/trending'}>
           Trending
         </MobileNavLink>
-        <MobileNavLink to="/search" current={location.pathname === '/search'}>
-          Search
+        <MobileNavLink to="/groups" current={location.pathname === '/groups'}>
+          Group
         </MobileNavLink>
+        {/* <MobileNavLink to="/search" current={location.pathname === '/search'}>
+          Search
+        </MobileNavLink> */}
         <MobileNavLink to="/live" current={location.pathname === '/live'}>
           Live
         </MobileNavLink>
