@@ -8,7 +8,6 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-     "build": "react-scripts build" // or "vite build"
   },
   "dependencies": {
     "appwrite": "^18.1.1",
