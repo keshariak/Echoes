@@ -246,16 +246,18 @@ const GroupChat: React.FC = () => {
       {/* Input */}
       <form
         onSubmit={handleSendMessage}
-        className="p-4 bg-white dark:bg-dark-300 border-t border-gray-300 dark:border-dark-200 flex space-x-3"
+        className="p-3 pt-1 dark:bg-dark-300  flex space-x-3"
       >
         <input
           type="text"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder={replyingTo ? 'Type your reply...' : 'Type a message...'}
-          className="flex-grow rounded-full border border-gray-300 dark:border-dark-200 bg-gray-50 dark:bg-dark-100 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+          className="flex-grow rounded-full border border-gray-300 dark:border-dark-200 bg-gray-50 dark:bg-dark-100 px-4 py-2 focus:outline-none  text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
           autoComplete="off"
           required
+          
+          
         />
         <button
           type="submit"
