@@ -47,6 +47,7 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await databases.listDocuments(DB_ID, COLLECTION_POST_ID, [
         Query.orderDesc('timestamp'),
+        
       ]);
 
       const reactedPosts = JSON.parse(localStorage.getItem('reactedPosts') || '{}');
@@ -60,10 +61,12 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
           laugh: !!reactedPosts[`${post.$id}_laugh`],
           neutral: !!reactedPosts[`${post.$id}_neutral`],
         };
+        // console.log(post)
         return { ...post, userReactions };
       });
 
       setPosts(fetchedPosts);
+      // console.log(response)
     } catch (error) {
       console.error('Failed to fetch posts:', error);
     }
@@ -187,9 +190,12 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
         Query.equal('postId', postId),
         Query.orderDesc('timestamp'),
       ]);
+      
       return response.documents as CommentType[];
     } catch (error) {
+      
       console.error('Failed to fetch comments:', error);
+      console.log('error aagya hai bhaiaiaiaaii', DB_ID ,COLLECTION_COMMENT_ID)
       return [];
     }
   };

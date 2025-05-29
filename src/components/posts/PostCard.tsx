@@ -50,7 +50,8 @@ const loadComments = async () => {
 };
 
   useEffect(() => {
-    if (showReplies) loadComments();
+    // if (showReplies)
+       loadComments();
   }, [showReplies]);
 
   useEffect(() => {
