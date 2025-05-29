@@ -62,7 +62,7 @@ const PostInput: React.FC<PostInputProps> = ({ initialCategory }) => {
           
           {isExpanded && (
             <div className="mt-3 flex flex-wrap gap-2">
-              {categories.slice(0, 8).map((cat) => (
+              {categories.map((cat) => (
                 <button
                   key={cat.id}
                   type="button"

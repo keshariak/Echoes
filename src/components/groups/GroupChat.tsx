@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, ArrowLeft, X, Reply, Loader2 } from 'lucide-react';
+import { Send, ArrowLeft, X, Reply, Loader2, Users } from 'lucide-react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { databases, DB_ID, COLLECTION_GROUP_MSG_ID, Query } from '../../configs/appwriteCongig';
 
@@ -27,6 +27,8 @@ const GroupChat: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const [senderId] = useState<string>(() => {
@@ -84,71 +86,76 @@ const GroupChat: React.FC = () => {
   }, [groupId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !groupId) return;
+  e.preventDefault();
+  if (!newMessage.trim() || !groupId || isSending) return;
 
-    try {
-      const messageToSend: any = {
-        groupId,
-        text: newMessage.trim(),
-        senderId,
-        timestamp: new Date().toISOString(),
-        replyToId: replyingTo ? replyingTo.$id : null,
-      };
+  setIsSending(true);
+  try {
+    const messageToSend: any = {
+      groupId,
+      text: newMessage.trim(),
+      senderId,
+      timestamp: new Date().toISOString(),
+      replyToId: replyingTo ? replyingTo.$id : null,
+      
+    };
 
-      const res = await databases.createDocument(
+    const res = await databases.createDocument(
+      DB_ID,
+      COLLECTION_GROUP_MSG_ID,
+      'unique()',
+      messageToSend
+    );
+
+    let fullMessage: Message = res as Message;
+
+    if (messageToSend.replyToId) {
+      const replyDoc = await databases.getDocument(
         DB_ID,
         COLLECTION_GROUP_MSG_ID,
-        'unique()',
-        messageToSend
+        messageToSend.replyToId
       );
 
-      let fullMessage: Message = res as Message;
-
-      if (messageToSend.replyToId) {
-        const replyDoc = await databases.getDocument(
-          DB_ID,
-          COLLECTION_GROUP_MSG_ID,
-          messageToSend.replyToId
-        );
-
-        fullMessage = {
-          ...fullMessage,
-          replyTo: {
-            $id: replyDoc.$id,
-            text: replyDoc.text,
-            senderId: replyDoc.senderId,
-          },
-        };
-      }
-
-      setMessages((prev) => [...prev, fullMessage]);
-      setNewMessage('');
-      setReplyingTo(null);
-    } catch (error) {
-      console.error('Failed to send message:', error);
+      fullMessage = {
+        ...fullMessage,
+        replyTo: {
+          $id: replyDoc.$id,
+          text: replyDoc.text,
+          senderId: replyDoc.senderId,
+        },
+      };
     }
-  };
+
+    setMessages((prev) => [...prev, fullMessage]);
+    setNewMessage('');
+    setReplyingTo(null);
+  } catch (error) {
+    console.error('Failed to send message:', error);
+  } finally {
+    setIsSending(false);
+  }
+};
 
   const cancelReply = () => setReplyingTo(null);
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] bg-gray-50 dark:bg-dark-900">
       {/* Header */}
-      <div className="bg-white dark:bg-dark-200 p-4 border-b border-gray-200 dark:border-dark-100 flex items-center">
+      <div className="bg-white dark:bg-dark-200 p-2 border-b border-gray-200 dark:border-dark-100 flex items-center">
         <button
           onClick={() => navigate('/groups')}
           className="mr-4 p-2 hover:bg-gray-200 dark:hover:bg-dark-100 rounded-full transition-colors"
         >
           <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
         </button>
+        < Users className="w-5 h-5 mr-3"  />
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
-          {groupName}
+            {groupName}
         </h2>
       </div>
 
       {/* Messages */}
-      <div className="flex-1  overflow-y-auto p-4 space-y-4 dark:bg-dark-300 scrollbar-thin scrollbar-thumb-primary-400 scrollbar-track-gray-200 dark:scrollbar-thumb-primary-600 dark:scrollbar-track-dark-300">
+      <div className="flex-1  overflow-y-auto p-4 space-y-4  dark:bg-dark-300 scrollbar-thin scrollbar-thumb-primary-400 scrollbar-track-gray-200 dark:scrollbar-thumb-primary-600 dark:scrollbar-track-dark-300">
         {isLoading ? (
           <div className="flex justify-center mt-10">
             <Loader2 className="animate-spin w-6 h-6 text-primary-600" />
@@ -259,12 +266,41 @@ const GroupChat: React.FC = () => {
           
           
         />
-        <button
-          type="submit"
-          className="rounded-full bg-primary-600 p-3 flex items-center justify-center hover:bg-primary-700 transition-colors text-white"
-        >
-          <Send className="w-5 h-5" />
-        </button>
+       <button
+  type="submit"
+  disabled={isSending}
+  className={`rounded-full p-3 flex items-center justify-center transition-colors text-white ${
+    isSending
+      ? 'bg-primary-400 cursor-not-allowed'
+      : 'bg-primary-600 hover:bg-primary-700'
+  }`}
+  aria-label="Send message"
+>
+  {isSending ? (
+    <svg
+      className="w-4 h-4 animate-spin text-white"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      ></circle>
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      ></path>
+    </svg>
+  ) : (
+    <Send className="w-4 h-4" />
+  )}
+</button>
+
       </form>
     </div>
   );
