@@ -275,7 +275,7 @@ const handleReaction = async (messageId: string, reactionKey: string) => {
       <button
         key={option.key}
         onClick={() => handleReaction(message.$id, option.key)}
-        className={`px-2 py-1 text-sm rounded-full flex items-center gap-1 ${reacted ? 'bg-primary-200 dark:bg-primary-900/20' : 'bg-gray-200 dark:bg-dark-200'}`}
+        className={`px-2 py-1 text-sm rounded-full flex items-center gap-1 ${reacted ? 'bg-primary-400 dark:bg-primary-900/20' : 'bg-gray-200 dark:bg-dark-200'}`}
       >
         <span>{option.emoji}</span>
         <span>{count}</span>
