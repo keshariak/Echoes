@@ -1,51 +1,36 @@
 import React, { useState } from 'react';
 import { Send } from 'lucide-react';
-// import { usePosts } from '../../context/PostContext';
 import { Category } from '../../types';
 import { categories } from '../../data/mockData';
-import { COLLECTION_POST_ID, databases, DB_ID } from '../../configs/appwriteCongig';
-import { ID } from 'appwrite';
+import { usePosts } from '../../context/PostContext';
 
-interface PostInputProps {
-  initialCategory?: Category;
-}
-
-const PostInput: React.FC<PostInputProps> = ({ initialCategory }) => {
+const PostInput: React.FC<{ initialCategory?: Category }> = ({ initialCategory }) => {
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<Category | undefined>(initialCategory);
   const [isExpanded, setIsExpanded] = useState(false);
-  // const { addPost } = usePosts();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const { addPost } = usePosts();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (content.trim()) {
-      // addPost(content, category);
-      
-      try {
-        const addedPost= await databases.createDocument(DB_ID, COLLECTION_POST_ID,ID.unique(), {
-      content: content,
-      timestamp: new Date().toISOString(),
-      reactions: {
-        hearts: 0,
-        flames: 0,
-        frowns: 0,
-      },
-      category: category,
-        } )
-        // console.log(addPost)
-      } catch (error) {
-        console.log(error)
-        
-      }
+    if (!content.trim()) return;
 
+    setIsSubmitting(true);
+
+    try {
+      await addPost(content, category);
       setContent('');
+      setCategory(undefined);
       setIsExpanded(false);
+    } catch (error) {
+      console.error('Failed to create post:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleFocus = () => {
-    setIsExpanded(true);
-  };
+  const handleFocus = () => setIsExpanded(true);
 
   return (
     <div className="bg-white dark:bg-dark-100 rounded-xl shadow-md p-4 mb-6 transition-all">
@@ -59,7 +44,7 @@ const PostInput: React.FC<PostInputProps> = ({ initialCategory }) => {
             className="w-full p-3 bg-gray-50 dark:bg-dark-200 border border-gray-200 dark:border-dark-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-700 focus:border-transparent resize-none transition-all duration-200 placeholder-gray-400 dark:placeholder-gray-500 text-gray-800 dark:text-gray-200"
             rows={isExpanded ? 5 : 3}
           />
-          
+
           {isExpanded && (
             <div className="mt-3 flex flex-wrap gap-2">
               {categories.map((cat) => (
@@ -78,11 +63,11 @@ const PostInput: React.FC<PostInputProps> = ({ initialCategory }) => {
               ))}
             </div>
           )}
-          
+
           <div className={`flex justify-end mt-3 ${isExpanded ? 'opacity-100' : 'opacity-0'} transition-opacity`}>
             <button
               type="submit"
-              disabled={!content.trim()}
+              disabled={!content.trim() || isSubmitting}
               className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg flex items-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <span className="mr-2">Echo</span>

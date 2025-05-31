@@ -1,5 +1,12 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { databases, DB_ID, COLLECTION_POST_ID, COLLECTION_COMMENT_ID, Query, ID } from '../configs/appwriteCongig';
+import {
+  databases,
+  DB_ID,
+  COLLECTION_POST_ID,
+  COLLECTION_COMMENT_ID,
+  Query,
+  ID,
+} from '../configs/appwriteCongig';
 
 type ReactionType = 'hearts' | 'flames' | 'cry' | 'smile' | 'laugh' | 'neutral';
 
@@ -47,7 +54,6 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const response = await databases.listDocuments(DB_ID, COLLECTION_POST_ID, [
         Query.orderDesc('timestamp'),
-        
       ]);
 
       const reactedPosts = JSON.parse(localStorage.getItem('reactedPosts') || '{}');
@@ -61,12 +67,10 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
           laugh: !!reactedPosts[`${post.$id}_laugh`],
           neutral: !!reactedPosts[`${post.$id}_neutral`],
         };
-        // console.log(post)
         return { ...post, userReactions };
       });
 
       setPosts(fetchedPosts);
-      // console.log(response)
     } catch (error) {
       console.error('Failed to fetch posts:', error);
     }
@@ -86,6 +90,7 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       const response = await databases.createDocument(DB_ID, COLLECTION_POST_ID, ID.unique(), newPost);
+
       const userReactions = {
         hearts: false,
         flames: false,
@@ -104,8 +109,6 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addReaction = async (postId: string, reactionType: ReactionType) => {
     try {
       const reactedPosts = JSON.parse(localStorage.getItem('reactedPosts') || '{}');
-
-      // Find existing reaction on this post by user
       const currentReactionKey = Object.keys(reactedPosts).find(key => key.startsWith(`${postId}_`));
       const currentReaction = currentReactionKey ? currentReactionKey.split('_')[1] as ReactionType : null;
 
@@ -115,31 +118,24 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const updatedReactions = { ...post.reactions };
 
       if (currentReaction === reactionType) {
-        // Toggle off reaction
         updatedReactions[reactionType] = Math.max(0, (post.reactions[reactionType] || 1) - 1);
         delete reactedPosts[currentReactionKey!];
       } else {
-        // Remove previous reaction if exists
         if (currentReaction) {
           updatedReactions[currentReaction] = Math.max(0, (post.reactions[currentReaction] || 1) - 1);
           delete reactedPosts[currentReactionKey!];
         }
-        // Add new reaction
         updatedReactions[reactionType] = (post.reactions[reactionType] || 0) + 1;
         reactedPosts[`${postId}_${reactionType}`] = true;
       }
 
-      // Update backend document
       await databases.updateDocument(DB_ID, COLLECTION_POST_ID, postId, {
         reactions: updatedReactions,
       });
 
-      // Update local posts state
       setPosts(prevPosts =>
         prevPosts.map(p => {
           if (p.$id !== postId) return p;
-
-          // Reset all userReactions to false
           const newUserReactions: { [key in ReactionType]: boolean } = {
             hearts: false,
             flames: false,
@@ -148,7 +144,6 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
             laugh: false,
             neutral: false,
           };
-
           if (currentReaction !== reactionType) {
             newUserReactions[reactionType] = true;
           }
@@ -190,12 +185,9 @@ export const PostProvider: React.FC<{ children: React.ReactNode }> = ({ children
         Query.equal('postId', postId),
         Query.orderDesc('timestamp'),
       ]);
-      
       return response.documents as CommentType[];
     } catch (error) {
-      
       console.error('Failed to fetch comments:', error);
-      console.log('error aagya hai bhaiaiaiaaii', DB_ID ,COLLECTION_COMMENT_ID)
       return [];
     }
   };

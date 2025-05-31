@@ -19,6 +19,7 @@ const CATEGORIES = [
 const Groups: React.FC = () => {
   const navigate = useNavigate();
   const { groups, loading, createGroup, refreshGroups } = useGroups();
+  console.log(groups)
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newGroup, setNewGroup] = useState({
