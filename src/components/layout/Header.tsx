@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTheme } from '../../context/ThemeContext';
 import { Moon, Sun, Heart, Search } from 'lucide-react';
+import Logo from '../../logo/logo1.png';
+import Logo2 from '../../logo/logo2.png';
 
 const Header: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
@@ -32,9 +34,15 @@ const Header: React.FC = () => {
     >
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
         <Link to="/" className="flex items-center space-x-2">
-          <Heart className="w-6 h-6 text-primary-500" fill="currentColor" />
+          {/* <Heart className="w-6 h-6 text-primary-500" fill="currentColor" /> */}
+          {
+            theme === "dark"?
+             <img className='w-8 h-8' src={Logo} alt="" /> 
+             : <img className='w-8 h-8' src={Logo2} alt="" />
+          }
+          
           <span className="text-xl font-bold bg-gradient-to-r from-primary-500 to-secondary-500 bg-clip-text text-transparent">
-            Echo
+            AnonyMess
           </span>
         </Link>
 

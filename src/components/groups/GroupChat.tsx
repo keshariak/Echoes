@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, ArrowLeft, X, Reply, Loader2, Users } from 'lucide-react';
+import { Send, ArrowLeft, X, Reply, Loader2, Users, Smile } from 'lucide-react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { databases, DB_ID, COLLECTION_GROUP_MSG_ID, Query } from '../../configs/appwriteCongig';
+
+const EMOJI_OPTIONS = [
+  { key: 'like', emoji: '👍' },
+  { key: 'heart', emoji: '❤️' },
+  { key: 'laugh', emoji: '😂' },
+  { key: 'wow', emoji: '😮' },
+  { key: 'sad', emoji: '😢' },
+];
 
 interface Message {
   $id: string;
@@ -15,9 +23,13 @@ interface Message {
     text: string;
     senderId: string;
   };
+  reactions?: {
+    [key: string]: {
+      [userId: string]: boolean;
+    };
+  };
 }
 
-// Helper function to safely parse and format timestamps
 function formatTimestamp(timestamp: string) {
   const date = new Date(timestamp);
   if (isNaN(date.getTime())) {
@@ -45,6 +57,7 @@ const GroupChat: React.FC = () => {
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -87,9 +100,10 @@ const GroupChat: React.FC = () => {
         }
 
         const messagesWithReplies = docs.map((msg) => ({
-          ...msg,
-          replyTo: msg.replyToId ? replyMessagesMap[msg.replyToId] : undefined,
-        }));
+  ...msg,
+  reactions: msg.reactions ? JSON.parse(msg.reactions as any) : {},
+  replyTo: msg.replyToId ? replyMessagesMap[msg.replyToId] : undefined,
+}));
 
         setMessages(messagesWithReplies);
       } catch (error) {
@@ -108,7 +122,7 @@ const GroupChat: React.FC = () => {
 
     setIsSending(true);
     try {
-      const messageToSend: any = {
+      const messageToSend = {
         groupId,
         text: newMessage.trim(),
         senderId,
@@ -153,88 +167,149 @@ const GroupChat: React.FC = () => {
   };
 
   const cancelReply = () => setReplyingTo(null);
+const handleReaction = async (messageId: string, reactionKey: string) => {
+  const message = messages.find(m => m.$id === messageId);
+  if (!message) return;
+
+  const currentReactions = typeof message.reactions === 'string'
+    ? JSON.parse(message.reactions)
+    : message.reactions || {};
+
+  const updatedReactions: Message["reactions"] = {};
+
+  // Remove all previous reactions by this user
+  for (const key of Object.keys(currentReactions)) {
+    updatedReactions[key] = { ...currentReactions[key] };
+    if (updatedReactions[key][senderId]) {
+      delete updatedReactions[key][senderId];
+    }
+  }
+
+  // If user already reacted with the same emoji, just leave (toggle off)
+  const alreadyReacted = currentReactions[reactionKey]?.[senderId];
+  if (!alreadyReacted) {
+    if (!updatedReactions[reactionKey]) updatedReactions[reactionKey] = {};
+    updatedReactions[reactionKey][senderId] = true;
+  }
+
+  try {
+    await databases.updateDocument(DB_ID, COLLECTION_GROUP_MSG_ID, messageId, {
+      reactions: JSON.stringify(updatedReactions),
+    });
+
+    setMessages(prev =>
+      prev.map(msg =>
+        msg.$id === messageId ? { ...msg, reactions: updatedReactions } : msg
+      )
+    );
+  } catch (err) {
+    console.error('Failed to update reaction:', err);
+  }
+
+  setShowEmojiPicker(null);
+};
+
+
+
+  const getReactionCount = (message: Message, reactionKey: string) => {
+    return Object.keys(message.reactions?.[reactionKey] || {}).length;
+  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] bg-gray-50 dark:bg-dark-900">
       {/* Header */}
       <div className="bg-white dark:bg-dark-200 p-2 border-b border-gray-200 dark:border-dark-100 flex items-center">
-        <button
-          onClick={() => navigate('/groups')}
-          className="mr-4 p-2 hover:bg-gray-200 dark:hover:bg-dark-100 rounded-full transition-colors"
-        >
+        <button onClick={() => navigate('/groups')} className="mr-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-dark-100 transition-colors">
           <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
         </button>
         <Users className="w-5 h-5 mr-3" />
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
-          {groupName}
-        </h2>
+        <h2 className="text-xl font-semibold truncate">{groupName}</h2>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 dark:bg-dark-300 scrollbar-thin scrollbar-thumb-primary-400 scrollbar-track-gray-200 dark:scrollbar-thumb-primary-600 dark:scrollbar-track-dark-300">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 dark:bg-dark-300">
         {isLoading ? (
           <div className="flex justify-center mt-10">
             <Loader2 className="animate-spin w-6 h-6 text-primary-600" />
           </div>
         ) : messages.length === 0 ? (
-          <p className="text-center text-gray-500 dark:text-gray-400 mt-8">
-            No messages yet. Start the conversation!
-          </p>
+          <p className="text-center text-gray-500 mt-8">No messages yet. Start the conversation!</p>
         ) : (
-          messages.map((message) => {
+          messages.map(message => {
             const isMine = message.senderId === senderId;
             const { iso, title, display } = formatTimestamp(message.timestamp);
 
             return (
-              <div
-                key={message.$id}
-                className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`
-                    max-w-[75%] rounded-xl p-4 relative
-                    ${isMine
-                      ? 'bg-primary-600 text-white shadow-md'
-                      : 'bg-white dark:bg-dark-100 text-gray-900 dark:text-gray-100 shadow-sm'}
-                  `}
-                >
+              <div key={message.$id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+                <div className={`relative max-w-[75%] p-4 rounded-xl ${isMine ? 'bg-primary-600 text-white' : 'bg-white dark:bg-dark-100 text-gray-900 dark:text-gray-100'} shadow`}>
                   {message.replyTo && (
-                    <div
-                      className={`
-                        mb-3 p-3 rounded-lg border-l-4 
-                        ${isMine
-                          ? 'border-primary-400 bg-primary-400 bg-opacity-40 text-white'
-                          : 'border-primary-600 bg-primary-100 dark:bg-primary-900/20 text-primary-800 dark:text-primary-300'}
-                      `}
-                      title={`Reply to: ${message.replyTo.text}`}
-                    >
-                      <p className="text-xs font-semibold truncate">
-                        Replying to:{' '}
-                        <span className="text-primary-300">
-                          {message.replyTo.senderId === senderId ? 'yourself' : 'anonymous'}
-                        </span>
+                    <div className={`mb-3 p-3 rounded-lg border-l-4 ${isMine ? 'border-primary-400 bg-primary-400/30' : 'border-primary-600 bg-primary-100 dark:bg-primary-900/20'}`}>
+                      <p className="text-xs font-semibold">
+                        Replying to <span>{message.replyTo.senderId === senderId ? 'yourself' : 'anonymous'}</span>
                       </p>
-                      <p className="text-sm truncate italic">{message.replyTo.text}</p>
+                      <p className="text-sm italic truncate">{message.replyTo.text}</p>
                     </div>
                   )}
-                  <p className="break-words whitespace-pre-wrap">{message.text}</p>
-                  <div className="flex w-full justify-between gap-3">
-                    <time
-                      dateTime={iso}
-                      className="text-xs opacity-60 mt-2 block text-right select-none"
-                      title={title}
-                    >
-                      {display}
-                    </time>
-                    <button
-                      onClick={() => setReplyingTo(message)}
-                      className="bottom-2 right-2 p-1 rounded-full hover:bg-primary-700 hover:text-white transition-colors"
-                      aria-label="Reply to message"
-                    >
-                      <Reply className="w-4 h-4 opacity-70 hover:opacity-100" />
+                  <p className="whitespace-pre-wrap">{message.text}</p>
+                  <div className="flex justify-between mt-2 items-center">
+                    <time className="text-xs opacity-60" title={title}>{display}</time>
+
+                    <div className='flex gap-3 ml-2'>
+                      <button onClick={() => setReplyingTo(message)} className="hover:text-primary-600">
+                      <Reply className="w-4 h-4" />
                     </button>
+
+                    <button onClick={() => setShowEmojiPicker(showEmojiPicker === message.$id ? null : message.$id)} 
+                className="">
+                  <Smile className="w-5 h-5" />
+                </button>
+                    </div>
                   </div>
+
+                  {/* Reactions */}
+                 <div className="flex gap-1 flex-wrap mt-2">
+  {EMOJI_OPTIONS.filter(option => getReactionCount(message, option.key) > 0).map(option => {
+    const count = getReactionCount(message, option.key);
+    const reacted = message.reactions?.[option.key]?.[senderId];
+    return (
+      <button
+        key={option.key}
+        onClick={() => handleReaction(message.$id, option.key)}
+        className={`px-2 py-1 text-sm rounded-full flex items-center gap-1 ${reacted ? 'bg-primary-200 dark:bg-primary-900/20' : 'bg-gray-200 dark:bg-dark-200'}`}
+      >
+        <span>{option.emoji}</span>
+        <span>{count}</span>
+      </button>
+    );
+  })}
+</div>
+
+
+
+
                 </div>
+
+                
+
+                {showEmojiPicker === message.$id && (
+  <div
+    className={`z-10 p-2 h-fit bg-white dark:bg-dark-200 border rounded-lg shadow-lg flex gap-2 flex-wrap w-max max-w-[90vw] top-full mt-2
+      ${isMine ? 'right-20' : 'right-0'}`}
+  >
+    {EMOJI_OPTIONS.map(option => (
+      <button
+        key={option.key}
+        onClick={() => handleReaction(message.$id, option.key)}
+        className="text-xl hover:scale-110 transition-transform"
+      >
+        {option.emoji}
+      </button>
+    ))}
+  </div>
+)}
+
+
+
               </div>
             );
           })
@@ -242,77 +317,29 @@ const GroupChat: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Reply Bar */}
+      {/* Reply Preview */}
       {replyingTo && (
-        <div className="bg-gray-100 dark:bg-dark-100 border-t border-gray-300 dark:border-dark-200 p-3 flex items-center space-x-4">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs text-gray-600 dark:text-gray-400">
-              Replying to{' '}
-              <strong>{replyingTo.senderId === senderId ? 'yourself' : 'anonymous'}</strong>
-            </p>
-            <p
-              className="text-sm truncate italic text-gray-800 dark:text-gray-200"
-              title={replyingTo.text}
-            >
-              {replyingTo.text}
-            </p>
+        <div className="p-3 bg-gray-100 dark:bg-dark-200 flex items-center justify-between border-t">
+          <div>
+            <p className="text-xs text-gray-500">Replying to {replyingTo.senderId === senderId ? 'yourself' : 'anonymous'}</p>
+            <p className="text-sm italic truncate">{replyingTo.text}</p>
           </div>
-          <button
-            onClick={cancelReply}
-            className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-            aria-label="Cancel reply"
-          >
-            <X className="w-5 h-5" />
+          <button onClick={cancelReply}>
+            <X className="w-5 h-5 text-gray-500" />
           </button>
         </div>
       )}
 
       {/* Input */}
-      <form
-        onSubmit={handleSendMessage}
-        className="p-3 pt-1 dark:bg-dark-300 flex space-x-3"
-      >
+      <form onSubmit={handleSendMessage} className="p-3 flex gap-3 bg-white dark:bg-dark-100 border-t">
         <input
-          type="text"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
-          placeholder={replyingTo ? 'Type your reply...' : 'Type a message...'}
-          className="flex-grow rounded-full border border-gray-300 dark:border-dark-200 bg-gray-50 dark:bg-dark-100 px-4 py-2 focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
-          autoComplete="off"
-          required
-          aria-label="Message input"
+          placeholder={replyingTo ? 'Reply...' : 'Type a message...'}
+          className="flex-1 px-4 py-2 rounded-full bg-gray-100 dark:bg-dark-300 border outline-none"
         />
-        <button
-          type="submit"
-          disabled={isSending}
-          className={`rounded-full p-3 flex items-center justify-center transition-colors text-white ${
-            isSending ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
-          }`}
-          aria-label="Send message"
-        >
-          {isSending ? (
-            <svg
-              className="w-4 h-4 animate-spin text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle
-                className="opacity-25"
-                cx="12"
-                cy="12"
-                r="10"
-                stroke="currentColor"
-                strokeWidth="4"
-              ></circle>
-              <path
-                className="opacity-75"
-                fill="currentColor"
-                d="M4 12a8 8 0 018-8v8z"
-              ></path>
-            </svg>
-          ) : (
-            <Send className="w-5 h-5" />
-          )}
+        <button type="submit" disabled={isSending} className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-full">
+          <Send className="w-5 h-5" />
         </button>
       </form>
     </div>
