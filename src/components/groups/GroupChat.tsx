@@ -17,6 +17,23 @@ interface Message {
   };
 }
 
+// Helper function to safely parse and format timestamps
+function formatTimestamp(timestamp: string) {
+  const date = new Date(timestamp);
+  if (isNaN(date.getTime())) {
+    return {
+      iso: undefined,
+      title: 'Invalid date',
+      display: 'Invalid time',
+    };
+  }
+  return {
+    iso: date.toISOString(),
+    title: date.toLocaleString(),
+    display: date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
 const GroupChat: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const location = useLocation();
@@ -86,55 +103,54 @@ const GroupChat: React.FC = () => {
   }, [groupId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
-  e.preventDefault();
-  if (!newMessage.trim() || !groupId || isSending) return;
+    e.preventDefault();
+    if (!newMessage.trim() || !groupId || isSending) return;
 
-  setIsSending(true);
-  try {
-    const messageToSend: any = {
-      groupId,
-      text: newMessage.trim(),
-      senderId,
-      timestamp: new Date().toISOString(),
-      replyToId: replyingTo ? replyingTo.$id : null,
-      
-    };
+    setIsSending(true);
+    try {
+      const messageToSend: any = {
+        groupId,
+        text: newMessage.trim(),
+        senderId,
+        timestamp: new Date().toISOString(),
+        replyToId: replyingTo ? replyingTo.$id : null,
+      };
 
-    const res = await databases.createDocument(
-      DB_ID,
-      COLLECTION_GROUP_MSG_ID,
-      'unique()',
-      messageToSend
-    );
-
-    let fullMessage: Message = res as Message;
-
-    if (messageToSend.replyToId) {
-      const replyDoc = await databases.getDocument(
+      const res = await databases.createDocument(
         DB_ID,
         COLLECTION_GROUP_MSG_ID,
-        messageToSend.replyToId
+        'unique()',
+        messageToSend
       );
 
-      fullMessage = {
-        ...fullMessage,
-        replyTo: {
-          $id: replyDoc.$id,
-          text: replyDoc.text,
-          senderId: replyDoc.senderId,
-        },
-      };
-    }
+      let fullMessage: Message = res as Message;
 
-    setMessages((prev) => [...prev, fullMessage]);
-    setNewMessage('');
-    setReplyingTo(null);
-  } catch (error) {
-    console.error('Failed to send message:', error);
-  } finally {
-    setIsSending(false);
-  }
-};
+      if (messageToSend.replyToId) {
+        const replyDoc = await databases.getDocument(
+          DB_ID,
+          COLLECTION_GROUP_MSG_ID,
+          messageToSend.replyToId
+        );
+
+        fullMessage = {
+          ...fullMessage,
+          replyTo: {
+            $id: replyDoc.$id,
+            text: replyDoc.text,
+            senderId: replyDoc.senderId,
+          },
+        };
+      }
+
+      setMessages((prev) => [...prev, fullMessage]);
+      setNewMessage('');
+      setReplyingTo(null);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const cancelReply = () => setReplyingTo(null);
 
@@ -148,14 +164,14 @@ const GroupChat: React.FC = () => {
         >
           <ArrowLeft className="w-5 h-5 text-gray-700 dark:text-gray-300" />
         </button>
-        < Users className="w-5 h-5 mr-3"  />
+        <Users className="w-5 h-5 mr-3" />
         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 truncate">
-            {groupName}
+          {groupName}
         </h2>
       </div>
 
       {/* Messages */}
-      <div className="flex-1  overflow-y-auto p-4 space-y-4  dark:bg-dark-300 scrollbar-thin scrollbar-thumb-primary-400 scrollbar-track-gray-200 dark:scrollbar-thumb-primary-600 dark:scrollbar-track-dark-300">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 dark:bg-dark-300 scrollbar-thin scrollbar-thumb-primary-400 scrollbar-track-gray-200 dark:scrollbar-thumb-primary-600 dark:scrollbar-track-dark-300">
         {isLoading ? (
           <div className="flex justify-center mt-10">
             <Loader2 className="animate-spin w-6 h-6 text-primary-600" />
@@ -167,8 +183,13 @@ const GroupChat: React.FC = () => {
         ) : (
           messages.map((message) => {
             const isMine = message.senderId === senderId;
+            const { iso, title, display } = formatTimestamp(message.timestamp);
+
             return (
-              <div key={message.$id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
+              <div
+                key={message.$id}
+                className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
+              >
                 <div
                   className={`
                     max-w-[75%] rounded-xl p-4 relative
@@ -197,27 +218,22 @@ const GroupChat: React.FC = () => {
                     </div>
                   )}
                   <p className="break-words whitespace-pre-wrap">{message.text}</p>
-                  <div className='flex  w-full justify-between gap-3 '>
+                  <div className="flex w-full justify-between gap-3">
                     <time
-                    dateTime={new Date(message.timestamp).toISOString()}
-                    className="text-xs opacity-60 mt-2 block text-right select-none"
-                    title={new Date(message.timestamp).toLocaleString()}
-                  >
-                    {new Date(message.timestamp).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </time>
-                  {/* <br /> */}
-                  <button
-                    onClick={() => setReplyingTo(message)}
-                    className="  bottom-2 right-2 p-1 rounded-full hover:bg-primary-700 hover:text-white transition-colors"
-                  >
-                    <Reply className="w-4 h-4 opacity-70 hover:opacity-100" />
-                  </button>
-
+                      dateTime={iso}
+                      className="text-xs opacity-60 mt-2 block text-right select-none"
+                      title={title}
+                    >
+                      {display}
+                    </time>
+                    <button
+                      onClick={() => setReplyingTo(message)}
+                      className="bottom-2 right-2 p-1 rounded-full hover:bg-primary-700 hover:text-white transition-colors"
+                      aria-label="Reply to message"
+                    >
+                      <Reply className="w-4 h-4 opacity-70 hover:opacity-100" />
+                    </button>
                   </div>
-                  
                 </div>
               </div>
             );
@@ -244,6 +260,7 @@ const GroupChat: React.FC = () => {
           <button
             onClick={cancelReply}
             className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            aria-label="Cancel reply"
           >
             <X className="w-5 h-5" />
           </button>
@@ -253,54 +270,50 @@ const GroupChat: React.FC = () => {
       {/* Input */}
       <form
         onSubmit={handleSendMessage}
-        className="p-3 pt-1 dark:bg-dark-300  flex space-x-3"
+        className="p-3 pt-1 dark:bg-dark-300 flex space-x-3"
       >
         <input
           type="text"
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder={replyingTo ? 'Type your reply...' : 'Type a message...'}
-          className="flex-grow rounded-full border border-gray-300 dark:border-dark-200 bg-gray-50 dark:bg-dark-100 px-4 py-2 focus:outline-none  text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+          className="flex-grow rounded-full border border-gray-300 dark:border-dark-200 bg-gray-50 dark:bg-dark-100 px-4 py-2 focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
           autoComplete="off"
           required
-          
-          
+          aria-label="Message input"
         />
-       <button
-  type="submit"
-  disabled={isSending}
-  className={`rounded-full p-3 flex items-center justify-center transition-colors text-white ${
-    isSending
-      ? 'bg-primary-400 cursor-not-allowed'
-      : 'bg-primary-600 hover:bg-primary-700'
-  }`}
-  aria-label="Send message"
->
-  {isSending ? (
-    <svg
-      className="w-4 h-4 animate-spin text-white"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle
-        className="opacity-25"
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="4"
-      ></circle>
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-      ></path>
-    </svg>
-  ) : (
-    <Send className="w-4 h-4" />
-  )}
-</button>
-
+        <button
+          type="submit"
+          disabled={isSending}
+          className={`rounded-full p-3 flex items-center justify-center transition-colors text-white ${
+            isSending ? 'bg-primary-400 cursor-not-allowed' : 'bg-primary-600 hover:bg-primary-700'
+          }`}
+          aria-label="Send message"
+        >
+          {isSending ? (
+            <svg
+              className="w-4 h-4 animate-spin text-white"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              ></circle>
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8v8z"
+              ></path>
+            </svg>
+          ) : (
+            <Send className="w-5 h-5" />
+          )}
+        </button>
       </form>
     </div>
   );
